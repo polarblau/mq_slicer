@@ -14,3 +14,8 @@ p.some-other-crap {
 
 p.more-crap {
   color: green; }
+
+
+@media screen and (min-width: 640px) {
+  p {
+    font-size: 0.8em; } }
