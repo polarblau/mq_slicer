@@ -1,53 +1,97 @@
 require 'active_support/core_ext/string'
-require 'pathname'
 
 class MQSlicer
 
   PATTERN = /(@media([^\{]+)\{([^\{\}]*\{[^\}\{]*\}[^\}\{])*\})/
 
-  def initialize(in_file)
-    begin
-      @base_path = File.dirname(in_file)
-      css_file   = File.open(in_file, "rb")
-      css        = css_file.read
-    rescue
-      raise "ERROR: Bad file '#{in_file}'" # TODO: custom error
+  attr_accessor :styles, :media_queries
+
+  def initialize(file)
+    @file, @styles = file, read_styles(file)
+    find_media_queries(@styles)
+  end
+
+  def media_queries
+    MediaQuery.all
+  end
+
+  def slice!
+    media_queries.map {|mq| mq.write_to_file(base_path) }
+    File.open(@file, 'w') do |file|
+      contents = @styles.gsub(PATTERN, '').gsub(/^$\n\n/, '')
+      file.write(contents)
     end
-    media_queries, css = slice(css)
+    media_queries.map {|mq| mq.to_link(base_path) }
+  end
 
-    @media_queries = media_queries
-      .group_by { |mq| mq[1].strip }
-      .sort_by  { |c, q| c         }
+  class ParserError < StandardError; end
 
-    @media_queries.each do |condition, queries|
-      contents = queries.map { |q| q[2] }.join("\n")
-      File.open(condition_file_path(condition), 'w') do |f|
-        f.write(contents)
+private
+
+  def base_path
+    File.dirname(@file)
+  end
+
+  def read_styles(file)
+    begin
+      File.open(file, "rb").read
+    rescue
+      raise ParserError, "Bad file '#{file}'"
+    end
+  end
+
+  def find_media_queries(styles)
+    matches = styles.scan(PATTERN)
+    matches.each do |match, condition, rules|
+      mq = MediaQuery.find_or_create(condition.strip)
+      mq.rules << rules
+    end
+  end
+
+  class MediaQuery
+
+    @@media_queries = []
+
+    attr_accessor :condition, # e.g. `screen and (min-width: 320px)`
+                  :rules      # Array of CSS rules
+
+    def self.find_or_create(condition)
+      mq = @@media_queries.find {|q| q.condition == condition }
+      mq || MediaQuery.new(condition)
+    end
+
+    def self.all
+      @@media_queries.sort_by(&:condition)
+    end
+
+    def initialize(condition, rules = '')
+      @condition = condition
+      @rules     = [rules].flatten
+      @@media_queries << self
+    end
+
+    def to_file_name
+      "#{@condition.parameterize}.css"
+    end
+
+    def to_file_path(base_path = nil)
+      File.join([base_path, self.to_file_name].compact)
+    end
+
+    def to_import_rule(base_path = nil)
+       "@import url(#{self.to_file_path(base_path)}) #{@condition};"
+    end
+
+    def to_link(base_path = nil)
+      %{<link rel="stylesheet" type="text/css" media="#{@condition}" href="#{self.to_file_path(base_path)}">}
+    end
+
+    def write_to_file(base_path = nil)
+      File.open(self.to_file_path(base_path), 'w') do |file|
+        file.write(@rules.join("\n").gsub(/^$\n/, ''))
       end
     end
 
-    File.open(in_file, 'w') { |f| f.write(css) }
-  end
-
-  def render_links
-    links = @media_queries.map do |condition, _|
-      %{<link rel="stylesheet" type="text/css" media="#{condition}" href="#{condition_file_path(condition)}">}
-    end
-    links.join("\n")
-  end
-
-  def base_path
-    @base_path
-  end
-
-  def condition_file_path(condition)
-    File.join(base_path, "#{condition.parameterize}.css")
-  end
-
-  def slice(string)
-    matches = string.scan(PATTERN)
-    string  = string.gsub(PATTERN, '')
-    [matches, string]
   end
 
 end
