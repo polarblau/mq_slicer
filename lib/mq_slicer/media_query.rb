@@ -32,7 +32,7 @@ module MQSlicer
     end
 
     def to_import_rule(base_path = nil)
-       "@import url(#{self.to_file_path(base_path)}) #{@condition};"
+      "@import url(#{self.to_file_path(base_path)}) #{@condition};"
     end
 
     def to_link(base_path = nil)
