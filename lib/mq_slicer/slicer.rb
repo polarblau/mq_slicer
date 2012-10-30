@@ -1,7 +1,8 @@
 module MQSlicer
   class Slicer
 
-    PATTERN = /(@media([^\{]+)\{([^\{\}]*\{[^\}\{]*\}[^\}\{])*\})/
+    PATTERN = /(@media([^\{]+){((?:[^{}]|{[^{}]*})*)})/
+      #/(@media([^\{]+)\{([^\{\}]*\{[^\}\{]*\}[^\}\{])*\})/
 
     attr_accessor :styles, :media_queries
 
